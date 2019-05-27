@@ -18,14 +18,9 @@ public class Ballistic extends AdvancedRobot{
 	 * run: Spin around looking for a target
 	 */
 	public void run() {
-		corBlack();
-		corRed();
 		while (true) {
-			if(pertoParede()) {
-					back(100);
-			}else {
-					ahead(100);
-				}
+		//se tiver perto da parede 
+			pertoParede();
 			// Tell the game we will want to move ahead 40000 -- some large number
 			setAhead(1000);
 			movingForward = true;
@@ -59,14 +54,14 @@ public class Ballistic extends AdvancedRobot{
 	 * onScannedRobot:  We have a target.  Go get it.
 	 */
 	public void onScannedRobot(ScannedRobotEvent e) {
-		fogo(e.getDistance());
-		if (e.getBearing() >= 0) {
+		fogo(normalRelativeAngle(e.getDistance()));
+		if (normalRelativeAngle(e.getBearing() >= 0)) {
 			turnDirection = 1;
 		} else {
 			turnDirection = -1;
 		}
 
-		turnRight(e.getBearing());
+		turnRight(normalRelativeAngle(e.getBearing()));
 		ahead(e.getDistance() + 4);
 		
 		scan(); // Might want to move ahead again!
@@ -105,7 +100,8 @@ public class Ballistic extends AdvancedRobot{
 		}
 		ahead(40); // Ram him again!
 	}
-	
+
+//verifica se está perto da parede	
 	public boolean pertoParede()
 	{
 		return
@@ -114,11 +110,23 @@ public class Ballistic extends AdvancedRobot{
 	}
 
 	//comemorando se ganhar 
-	public void onWin(WinEvent e)
-	{
-		turnLeft(72000);
+	public void onWin(WinEvent e){
+		for (int i = 0; i < 50; i++) {
+			turnRight(30);
+			turnLeft(30);
+		}
 	}
 	
+
+	public void onHitByBullet(HitByBulletEvent e) {
+		// Replace the next line with any behavior you would like
+		turnRight(45);
+		back(200);
+		turnLeft(45);
+		back(200);
+		turnRight(90);
+		ahead(200);
+	}
 
 	//muda a cor do robo para vermelho
 	public void corRed(){
@@ -146,5 +154,20 @@ public class Ballistic extends AdvancedRobot{
 		} else {
 			fire(3);
 	    }
+}
+
+	public double normalRelativeAngle(double angle) {
+		if (angle > -180 && angle <= 180) {
+				return angle;
+			}
+		double fixedAngle = angle;
+	 
+		while (fixedAngle <= -180) {
+				fixedAngle += 360;
+			}
+		while (fixedAngle > 180) {
+				fixedAngle -= 360;
+			}
+		return fixedAngle;
 }
 }

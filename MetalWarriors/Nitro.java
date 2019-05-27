@@ -12,7 +12,6 @@ import robocode.HitRobotEvent;
 import robocode.Robot;
 import robocode.ScannedRobotEvent;
 import robocode.WinEvent;
-import static robocode.util.Utils.normalRelativeAngleDegrees;
 
 import java.awt.*;
 
@@ -84,7 +83,7 @@ public class Nitro extends Robot {
 		count = 0;
 		// If our target is too far away, turn and move toward it.
 		if (e.getDistance() > 150) {
-			gunTurnAmt = normalRelativeAngleDegrees(e.getBearing() + (getHeading() - getRadarHeading()));
+			gunTurnAmt = normalRelativeAngle(e.getBearing() + (getHeading() - getRadarHeading()));
 
 			turnGunRight(gunTurnAmt); // Try changing these to setTurnGunRight,
 			turnRight(e.getBearing()); // and see how much Tracker improves...
@@ -94,7 +93,7 @@ public class Nitro extends Robot {
 		}
 
 		// Our target is close.
-		gunTurnAmt = normalRelativeAngleDegrees(e.getBearing() + (getHeading() - getRadarHeading()));
+		gunTurnAmt = normalRelativeAngle(e.getBearing() + (getHeading() - getRadarHeading()));
 		turnGunRight(gunTurnAmt);
 		fire(3);
 
@@ -122,7 +121,7 @@ public class Nitro extends Robot {
 		// Back up a bit.
 		// Note:  We won't get scan events while we're doing this!
 		// An AdvancedRobot might use setBack(); execute();
-		gunTurnAmt = normalRelativeAngleDegrees(e.getBearing() + (getHeading() - getRadarHeading()));
+		gunTurnAmt = normalRelativeAngle(e.getBearing() + (getHeading() - getRadarHeading()));
 		turnGunRight(gunTurnAmt);
 		fire(3);
 		back(50);
@@ -154,5 +153,20 @@ public class Nitro extends Robot {
 		setRadarColor(Color.white);
 		setScanColor(Color.white);
 		setBulletColor(Color.blue);		
+}
+
+	public double normalRelativeAngle(double angle) {
+			if (angle > -180 && angle <= 180) {
+				return angle;
+			}
+			double fixedAngle = angle;
+	 
+			while (fixedAngle <= -180) {
+				fixedAngle += 360;
+			}
+			while (fixedAngle > 180) {
+				fixedAngle -= 360;
+			}
+			return fixedAngle;
 }
 }
