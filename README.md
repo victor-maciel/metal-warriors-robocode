@@ -1,2 +1,4 @@
 # metal-warriors-robocode
-Robôs feito para o robocode, inspirado no jogo Metal Warriors do SNES 
+Robôs feito para o robocode, inspirados no jogo Metal Warriors do SNES 
+
+> Status do projeto: em desenvolvimento
