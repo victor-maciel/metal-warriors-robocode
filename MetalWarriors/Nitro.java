@@ -1,172 +1,167 @@
-/**
- * Copyright (c) 2001-2019 Mathew A. Nelson and Robocode contributors
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * https://robocode.sourceforge.io/license/epl-v10.html
- */
 package MetalWarriors;
 
-import robocode.HitByBulletEvent;
-import robocode.HitRobotEvent;
-import robocode.Robot;
-import robocode.ScannedRobotEvent;
-import robocode.WinEvent;
+import robocode.*;
+import robocode.util.Utils;
 
 import java.awt.*;
 
-
 /**
- * Tracker - a sample robot by Mathew Nelson.
- * <p>
- * Locks onto a robot, moves close, fires when close.
- *
- * @author Mathew A. Nelson (original)
- * @author Flemming N. Larsen (contributor)
+ * Nitro - a robot by Victor Maciel
+ * Nitro - Inspirado num robô do jogo Metal Warriors do Super Nintendo.
+ * 		Versátil e equilibrado:
+ * 		- rifle de energia: tiro médio com mira preditiva a média distância
+ * 		- sabre de luz: se o inimigo chega perto, parte para cima e dá dano alto
+ * 		- escudo: quando percebe que o inimigo atirou, se esquiva
+ * 		- voo livre com jatos: movimentação ágil em volta do inimigo
+ * 		--> A IDEIA NÃO É VENCER E SIM SIMULAR O OS PADRÕES DO JOGO NO ROBÔ <--
+ * Projeto MetalWarriors: https://github.com/victor-maciel/metal-warriors-robocode
  */
-public class Nitro extends Robot {
-	int count = 0; // Keeps track of how long we've
-	// been searching for our target
-	double gunTurnAmt; // How much to turn our gun when searching
-	String trackName; // Name of the robot we're currently tracking
+public class Nitro extends AdvancedRobot {
+	int direcao = 1;
+	double energiaInimigo = 100;
+	static final double DISTANCIA_IDEAL = 250; // alcance do rifle
+	static final double DISTANCIA_SABRE = 110; // alcance do sabre
 
-	/**
-	 * run:  Tracker's main run function
-	 */
 	public void run() {
-		// Set colors
 		robotColor();
+		setAdjustGunForRobotTurn(true);
+		setAdjustRadarForGunTurn(true);
+		setAdjustRadarForRobotTurn(true);
 
-		// Prepare gun
-		trackName = null; // Initialize to not tracking anyone
-		setAdjustGunForRobotTurn(true); // Keep the gun still when we turn
-		gunTurnAmt = 10; // Initialize gunTurn to 10
-
-		// Loop forever
 		while (true) {
-			// turn the Gun (looks for enemy)
-			turnGunRight(gunTurnAmt);
-			// Keep track of how long we've been looking
-			count++;
-			// If we've haven't seen our target for 2 turns, look left
-			if (count > 2) {
-				gunTurnAmt = -10;
+			if (getRadarTurnRemaining() == 0) {
+				setTurnRadarRight(360);
 			}
-			// If we still haven't seen our target for 5 turns, look right
-			if (count > 5) {
-				gunTurnAmt = 10;
+			if (getDistanceRemaining() == 0 && getTurnRemaining() == 0) {
+				setAhead(100);
 			}
-			// If we *still* haven't seen our target after 10 turns, find another target
-			if (count > 11) {
-				trackName = null;
-			}
+			corPelaEnergia();
+			execute();
 		}
 	}
 
-	/**
-	 * onScannedRobot:  Here's the good stuff
-	 */
 	public void onScannedRobot(ScannedRobotEvent e) {
+		double anguloAbs = getHeadingRadians() + e.getBearingRadians();
+		setTurnRadarRightRadians(2 * Utils.normalRelativeAngle(anguloAbs - getRadarHeadingRadians()));
 
-		// If we have a target, and this isn't it, return immediately
-		// so we can get more ScannedRobotEvents.
-		if (trackName != null && !e.getName().equals(trackName)) {
-			return;
+		// escudo: o inimigo atirou (energia caiu) -> esquiva
+		double queda = energiaInimigo - e.getEnergy();
+		if (queda > 0.09 && queda <= 3.0) {
+			direcao = -direcao;
+		}
+		energiaInimigo = e.getEnergy();
+
+		double dist = e.getDistance();
+		double poder;
+
+		if (dist < DISTANCIA_SABRE) {
+			// sabre de luz: investe e causa dano alto no corpo a corpo
+			setMaxVelocity(8);
+			setTurnRight(Utils.normalRelativeAngleDegrees(e.getBearing()));
+			setAhead(dist + 20);
+			poder = 3;
+		} else {
+			// rifle: orbita em média distância
+			double ajuste = 0;
+			if (dist > DISTANCIA_IDEAL + 70) {
+				ajuste = -25;
+			} else if (dist < DISTANCIA_IDEAL - 70) {
+				ajuste = 25;
+			}
+			setMaxVelocity(8);
+			orbita(e.getBearing() + 90 * direcao + ajuste * direcao, 100);
+			poder = dist < 350 ? 2 : 1.5; // dano médio
+		}
+		if (getEnergy() < 15) {
+			poder = Math.min(poder, 1);
 		}
 
-		// If we don't have a target, well, now we do!
-		if (trackName == null) {
-			trackName = e.getName();
-			out.println("Tracking " + trackName);
+		double mira = miraPreditiva(e, poder);
+		setTurnGunRightRadians(Utils.normalRelativeAngle(mira - getGunHeadingRadians()));
+		if (getGunHeat() == 0 && Math.abs(getGunTurnRemaining()) < 10) {
+			setFire(poder);
 		}
-		// This is our target.  Reset count (see the run method)
-		count = 0;
-		// If our target is too far away, turn and move toward it.
-		if (e.getDistance() > 150) {
-			gunTurnAmt = normalRelativeAngle(e.getBearing() + (getHeading() - getRadarHeading()));
+	}
 
-			turnGunRight(gunTurnAmt); // Try changing these to setTurnGunRight,
-			turnRight(e.getBearing()); // and see how much Tracker improves...
-			// (you'll have to make Tracker an AdvancedRobot)
-			ahead(e.getDistance() - 140);
-			return;
+	/**
+	 * Orbita de verdade nos dois sentidos: anda sempre pelo caminho mais curto
+	 * (frente ou ré) e, se o ponto à frente sair da arena, vira para o centro.
+	 */
+	void orbita(double giro, double dist) {
+		giro = Utils.normalRelativeAngleDegrees(giro);
+		if (Math.abs(giro) > 90) {
+			giro = Utils.normalRelativeAngleDegrees(giro + 180);
+			dist = -dist;
 		}
-
-		// Our target is close.
-		gunTurnAmt = normalRelativeAngle(e.getBearing() + (getHeading() - getRadarHeading()));
-		turnGunRight(gunTurnAmt);
-		fire(3);
-
-		// Our target is too close!  Back up.
-		if (e.getDistance() < 100) {
-			if (e.getBearing() > -90 && e.getBearing() <= 90) {
-				back(40);
-			} else {
-				ahead(40);
+		double h = Math.toRadians(getHeading() + giro + (dist < 0 ? 180 : 0));
+		double px = getX() + Math.sin(h) * 150, py = getY() + Math.cos(h) * 150;
+		double m = 60;
+		if (px < m || px > getBattleFieldWidth() - m || py < m || py > getBattleFieldHeight() - m) {
+			double centro = Math.toDegrees(Math.atan2(getBattleFieldWidth() / 2 - getX(), getBattleFieldHeight() / 2 - getY()));
+			giro = Utils.normalRelativeAngleDegrees(centro - getHeading());
+			dist = Math.abs(dist);
+			if (Math.abs(giro) > 90) {
+				giro = Utils.normalRelativeAngleDegrees(giro + 180);
+				dist = -dist;
 			}
 		}
-		scan();
+		setTurnRight(giro);
+		setAhead(dist);
 	}
 
-	/**
-	 * onHitRobot:  Set him as our new target
-	 */
-	public void onHitRobot(HitRobotEvent e) {
-		// Only print if he's not already our target.
-		if (trackName != null && !trackName.equals(e.getName())) {
-			out.println("Tracking " + e.getName() + " due to collision");
+	double miraPreditiva(ScannedRobotEvent e, double poder) {
+		double velTiro = 20 - 3 * poder;
+		double anguloAbs = getHeadingRadians() + e.getBearingRadians();
+		double ex = getX() + e.getDistance() * Math.sin(anguloAbs);
+		double ey = getY() + e.getDistance() * Math.cos(anguloAbs);
+		double px = ex, py = ey;
+
+		for (int i = 0; i < 10; i++) {
+			double t = Math.hypot(px - getX(), py - getY()) / velTiro;
+			px = ex + e.getVelocity() * t * Math.sin(e.getHeadingRadians());
+			py = ey + e.getVelocity() * t * Math.cos(e.getHeadingRadians());
+			px = Math.max(18, Math.min(getBattleFieldWidth() - 18, px));
+			py = Math.max(18, Math.min(getBattleFieldHeight() - 18, py));
 		}
-		// Set the target
-		trackName = e.getName();
-		// Back up a bit.
-		// Note:  We won't get scan events while we're doing this!
-		// An AdvancedRobot might use setBack(); execute();
-		gunTurnAmt = normalRelativeAngle(e.getBearing() + (getHeading() - getRadarHeading()));
-		turnGunRight(gunTurnAmt);
-		fire(3);
-		back(50);
+		return Math.atan2(px - getX(), py - getY());
 	}
 
-	/**
-	 * onWin:  Do a victory dance
-	 */
+	public void onHitRobot(HitRobotEvent e) {
+		// golpe de sabre
+		setTurnGunRight(Utils.normalRelativeAngleDegrees(getHeading() + e.getBearing() - getGunHeading()));
+		if (getGunHeat() == 0) {
+			setFire(3);
+		}
+	}
+
+	public void onHitWall(HitWallEvent e) {
+		direcao = -direcao;
+	}
+
+	public void onHitByBullet(HitByBulletEvent e) {
+		direcao = -direcao;
+	}
+
 	public void onWin(WinEvent e) {
 		for (int i = 0; i < 50; i++) {
 			turnRight(30);
 			turnLeft(30);
 		}
 	}
-	public void onHitByBullet(HitByBulletEvent e) {
-		// Replace the next line with any behavior you would like
-			turnRight(45);
-			back(200);
-			turnLeft(45);
-			back(200);
-			turnRight(90);
-			ahead(500);
+
+	Color corBase = new Color(153, 50, 204);
+
+	/** Sem barra de vida: quanto menos energia, mais escuro o robô (como no jogo). */
+	void corPelaEnergia() {
+		double f = Math.max(0.2, Math.min(1.0, getEnergy() / 100.0));
+		setBodyColor(new Color((int) (corBase.getRed() * f), (int) (corBase.getGreen() * f), (int) (corBase.getBlue() * f)));
 	}
 
-
-	public void robotColor(){
-		setBodyColor(new Color(153, 50, 204));
+	public void robotColor() {
+		setBodyColor(corBase);
 		setGunColor(new Color(255, 0, 0));
 		setRadarColor(Color.white);
 		setScanColor(Color.white);
-		setBulletColor(Color.blue);		
-}
-
-	public double normalRelativeAngle(double angle) {
-			if (angle > -180 && angle <= 180) {
-				return angle;
-			}
-			double fixedAngle = angle;
-	 
-			while (fixedAngle <= -180) {
-				fixedAngle += 360;
-			}
-			while (fixedAngle > 180) {
-				fixedAngle -= 360;
-			}
-			return fixedAngle;
-}
+		setBulletColor(Color.blue);
+	}
 }

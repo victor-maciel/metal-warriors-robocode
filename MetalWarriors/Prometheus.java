@@ -21,6 +21,9 @@ public class Prometheus extends AdvancedRobot{
 
 	public void run() {
 
+		// tanque pesado: caminhada lenta
+		setMaxVelocity(4);
+
 		// Robot main loop
 		while(true) {
 		//verifica se está perto da parede, verifica a energia e faz movimentação lenta
@@ -121,8 +124,10 @@ public class Prometheus extends AdvancedRobot{
 	 */
 	public void fogo(double Distancia) {
 		verificaEnergia();
-		if(Distancia > 200 || getEnergy() < 15){
+		if(getEnergy() < 15){
 			fire(1);
+		} else if (Distancia > 250) {
+			fire(3); // canhão principal: longo alcance e alto impacto
 		} else if (Distancia > 50) {
 			fire(2);
 		} else {

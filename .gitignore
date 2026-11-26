@@ -1,0 +1,6 @@
+# Ignora a instalação do Robocode; versiona só os robôs e o README
+/*
+!/.gitignore
+!/README.md
+!/MetalWarriors/
+!/docs/

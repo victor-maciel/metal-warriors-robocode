@@ -1,173 +1,145 @@
 package MetalWarriors;
 
-import robocode.HitRobotEvent;
-import robocode.ScannedRobotEvent;
-import robocode.AdvancedRobot;
 import robocode.*;
+import robocode.util.Utils;
 
 import java.awt.*;
 
 /**
- * Ballistic - a robot by (Victor Maciel)
+ * Ballistic - a robot by Victor Maciel
+ * Ballistic - Inspirado num robô do jogo Metal Warriors do Super Nintendo.
+ * 		Ataque em alta velocidade e tiros carregados:
+ * 		- ROLANDO: vira esfera e avança a toda velocidade (power spin).
+ * 		  NÃO atira enquanto está em movimento (fraqueza do robô).
+ * 		- CARREGANDO: para, mira e dispara o canhão de plasma (tiro forte),
+ * 		  depois volta a rolar.
+ * 		--> A IDEIA NÃO É VENCER E SIM SIMULAR O OS PADRÕES DO JOGO NO ROBÔ <--
+ * Projeto MetalWarriors: https://github.com/victor-maciel/metal-warriors-robocode
  */
-public class Ballistic extends AdvancedRobot{
-	boolean movingForward;
-	int turnDirection = 1; // Clockwise or counterclockwise
+public class Ballistic extends AdvancedRobot {
+	static final int ROLANDO = 0;
+	static final int CARREGANDO = 1;
 
-	/**
-	 * run: Spin around looking for a target
-	 */
+	int estado = ROLANDO;
+	int ticksCarga = 0;
+
+	// último alvo visto
+	boolean temAlvo = false;
+	double alvoAbs = 0;       // direção absoluta (graus) até o inimigo
+	double alvoDist = 9999;
+	long ultimoScan = -100;
+
 	public void run() {
+		cores();
+		setAdjustGunForRobotTurn(true);
+		setAdjustRadarForGunTurn(true);
+		setAdjustRadarForRobotTurn(true);
+
 		while (true) {
-		//se tiver perto da parede 
-			pertoParede();
-			// Tell the game we will want to move ahead 40000 -- some large number
-			setAhead(1000);
-			movingForward = true;
-			// Tell the game we will want to turn right 90
-			setTurnRight(90);
-			corBlack();
-			// At this point, we have indicated to the game that *when we do something*,
-			// we will want to move ahead and turn right.  That's what "set" means.
-			// It is important to realize we have not done anything yet!
-			// In order to actually move, we'll want to call a method that
-			// takes real time, such as waitFor.
-			// waitFor actually starts the action -- we start moving and turning.
-			// It will not return until we have finished turning.
-			waitFor(new TurnCompleteCondition(this));
-			// Note:  We are still moving ahead now, but the turn is complete.
-			// Now we'll turn the other way...
-			setTurnLeft(45);
-			corRed();
-			// ... and wait for the turn to finish ...
-			waitFor(new TurnCompleteCondition(this));
-			// ... then the other way ...
-			setTurnRight(45);
-			// .. and wait for that turn to finish.
-			waitFor(new TurnCompleteCondition(this));
-			// then back to the top to do it all again
-	
+			if (getRadarTurnRemaining() == 0) {
+				setTurnRadarRight(360);
+			}
+			if (getTime() - ultimoScan > 20) {
+				temAlvo = false;
+			}
+
+			if (estado == ROLANDO) {
+				rolar();
+			} else {
+				carregar();
+			}
+			corPelaEnergia();
+			execute();
 		}
 	}
 
-	/**
-	 * onScannedRobot:  We have a target.  Go get it.
-	 */
+	/** Esfera rolando: muito rápido, sem atirar. */
+	void rolar() {
+		setMaxVelocity(8);
+		if (temAlvo) {
+			// muito rápido, porém mais voltado para fuga: com pouca energia foge
+			boolean fugindo = getEnergy() < 30;
+			double rumo = fugindo ? alvoAbs + 180 : alvoAbs;
+			setTurnRight(Utils.normalRelativeAngleDegrees(rumo - getHeading()));
+			setAhead(fugindo ? 200 : alvoDist);
+			if (alvoDist < 170 && !fugindo) {
+				estado = CARREGANDO;
+				ticksCarga = 0;
+			}
+		} else {
+			// sem alvo: gira procurando
+			setTurnRight(30);
+			setAhead(150);
+		}
+	}
+
+	/** Parado, carregando o canhão de plasma. */
+	void carregar() {
+		setMaxVelocity(0); // para de se mover
+		setAhead(0);
+		ticksCarga++;
+
+		// inimigo fugiu ou sumiu: volta a rolar
+		if (!temAlvo || alvoDist > 320) {
+			estado = ROLANDO;
+			return;
+		}
+
+		// só atira quando está totalmente parado, mirando e com a carga pronta
+		if (ticksCarga >= 20 && getVelocity() == 0
+				&& getGunHeat() == 0 && Math.abs(getGunTurnRemaining()) < 6) {
+			// plasma carregável (estilo Megaman): quanto mais carga, mais forte
+			setFire(Math.min(getEnergy() > 20 ? 3 : 1.5, 0.5 + ticksCarga * 0.1));
+			estado = ROLANDO;
+		}
+	}
+
 	public void onScannedRobot(ScannedRobotEvent e) {
-		fogo(normalRelativeAngle(e.getDistance()));
-		if (normalRelativeAngle(e.getBearing() >= 0)) {
-			turnDirection = 1;
-		} else {
-			turnDirection = -1;
-		}
+		alvoAbs = Utils.normalAbsoluteAngleDegrees(getHeading() + e.getBearing());
+		alvoDist = e.getDistance();
+		temAlvo = true;
+		ultimoScan = getTime();
 
-		turnRight(normalRelativeAngle(e.getBearing()));
-		ahead(e.getDistance() + 4);
-		
-		scan(); // Might want to move ahead again!
+		// trava radar e mira o canhão
+		double anguloAbsRad = getHeadingRadians() + e.getBearingRadians();
+		setTurnRadarRightRadians(2 * Utils.normalRelativeAngle(anguloAbsRad - getRadarHeadingRadians()));
+		setTurnGunRight(Utils.normalRelativeAngleDegrees(alvoAbs - getGunHeading()));
 	}
-	
 
-	/**
-	 * onHitRobot:  Turn to face robot, fire hard, and ram him again!
-	 */
+	/** Bateu rolando: metralhadora à queima-roupa (parado pelo impacto). */
 	public void onHitRobot(HitRobotEvent e) {
-		ahead(100);
-		if (e.getBearing() >= 0) {
-			turnDirection = 1;
-		} else {
-			turnDirection = -1;
+		setTurnGunRight(Utils.normalRelativeAngleDegrees(getHeading() + e.getBearing() - getGunHeading()));
+		if (getGunHeat() == 0 && getVelocity() == 0) {
+			setFire(1);
 		}
-		turnRight(e.getBearing());
-
-		// Determine a shot that won't kill the robot...
-		// We want to ram him instead for bonus points
-		if (e.getEnergy() > 16) {
-			fire(3);
-			corRed();
-		} else if (e.getEnergy() > 10) {
-			fire(2);
-			corBlack();
-		} else if (e.getEnergy() > 4) {
-			fire(1);
-			corRed();
-		} else if (e.getEnergy() > 2) {
-			fire(.5);
-			corBlack();
-		} else if (e.getEnergy() > .4) {
-			fire(.1);
-			corRed();
-		}
-		ahead(40); // Ram him again!
 	}
 
-//verifica se está perto da parede	
-	public boolean pertoParede()
-	{
-		return
-		(getX() < 150 || getX() > getBattleFieldWidth() - 150 ||
-		 getY() < 150 || getY() > getBattleFieldHeight() -150);
+	public void onHitWall(HitWallEvent e) {
+		setBack(60);
+		setTurnRight(90);
 	}
 
-	//comemorando se ganhar 
-	public void onWin(WinEvent e){
+	public void onWin(WinEvent e) {
+		setMaxVelocity(8);
 		for (int i = 0; i < 50; i++) {
 			turnRight(30);
 			turnLeft(30);
 		}
 	}
-	
 
-	public void onHitByBullet(HitByBulletEvent e) {
-		// Replace the next line with any behavior you would like
-		turnRight(45);
-		back(200);
-		turnLeft(45);
-		back(200);
-		turnRight(90);
-		ahead(200);
+	Color corBase = new Color(70, 80, 120);
+
+	/** Sem barra de vida: quanto menos energia, mais escuro o robô (como no jogo). */
+	void corPelaEnergia() {
+		double f = Math.max(0.2, Math.min(1.0, getEnergy() / 100.0));
+		setBodyColor(new Color((int) (corBase.getRed() * f), (int) (corBase.getGreen() * f), (int) (corBase.getBlue() * f)));
 	}
 
-	//muda a cor do robo para vermelho
-	public void corRed(){
-		setBodyColor(Color.red);
+	public void cores() {
+		setBodyColor(corBase);
 		setGunColor(Color.red);
 		setRadarColor(Color.red);
 		setBulletColor(Color.red);
 		setScanColor(Color.red);
 	}
-	
-	//muda a cor do robo para preto
-	public void corBlack(){
-		setBodyColor(Color.black);
-		setGunColor(Color.black);
-		setRadarColor(Color.black);
-		setBulletColor(Color.black);
-		setBodyColor(Color.black);
-	}
-	
-	public void fogo(double Distancia) {
-		if (Distancia > 200 || getEnergy() < 15) {
-			fire(1);
-		} else if (Distancia > 50) {
-			fire(2);
-		} else {
-			fire(3);
-	    }
-}
-
-	public double normalRelativeAngle(double angle) {
-		if (angle > -180 && angle <= 180) {
-				return angle;
-			}
-		double fixedAngle = angle;
-	 
-		while (fixedAngle <= -180) {
-				fixedAngle += 360;
-			}
-		while (fixedAngle > 180) {
-				fixedAngle -= 360;
-			}
-		return fixedAngle;
-}
 }
